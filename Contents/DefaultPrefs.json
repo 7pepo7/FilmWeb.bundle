@@ -1,0 +1,34 @@
+[
+		{
+				"id": "numthumb",
+				"label": "Maximum number of downloaded Posters and Arts.",
+				"type": "enum",
+				"values": ["1", "3", "5", "10", "15", "20", "unlimited"],          
+				"default": "1"
+		},
+    {
+        "id": "delthumb",
+        "label": "Delete previous Posters and Arts.",
+        "type": "bool",
+        "default": "true",
+    },
+    {
+        "id": "searchYears",
+        "label": "How many years to search?",
+        "type": "enum",
+        "values": ["0", "1", "2", "3", "5", "7", "10"],          
+				"default": "1",
+    },
+    {
+        "id": "firstPlaceBonus",
+        "label": "Take into account first place in FilmWeb.pl search order and give bonus ?",
+        "type": "bool",
+        "default": "false",
+    },
+    {
+        "id": "overrideFilmWebOrder",
+        "label": "Take FilmWeb.pl search order?",
+        "type": "bool",
+        "default": "false",
+    },
+]
