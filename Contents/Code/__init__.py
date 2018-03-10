@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import time, urllib, re, unicodedata
 
 FILMWEB = 'http://www.filmweb.pl'
@@ -19,49 +20,61 @@ class FilmWebStandaloneAgent(Agent.Movies):
 		search_years = int(Prefs['searchYears']);
     
 		if media.year:
-			search_filmweb_result = HTML.ElementFromURL(FILMWEB_SEARCH % (search_name, str(int(media.year) - search_years), str(int(media.year) + search_years)), 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
+			search_url = FILMWEB_SEARCH % (search_name, str(int(media.year) - search_years), str(int(media.year) + search_years))
 		else:
-			search_filmweb_result = HTML.ElementFromURL(FILMWEB_SEARCH % (search_name, str(1900), str(Datetime.Now().year)), 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
-    
+			search_url = FILMWEB_SEARCH % (search_name, str(1900), str(Datetime.Now().year))
+	
+		search_filmweb_result = HTML.ElementFromURL(search_url, 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
+		   
 		#mine = []
-		movies_list = search_filmweb_result.xpath("//ul[@class='sep-hr resultsList']");
+		movies_list = search_filmweb_result.xpath("//ul[@class='resultsList hits']");
  
 		if not movies_list:
+			Log('filmweb.pl - nothing found')
 			return 1;
+		else:
+			Log('filmweb.pl - found')
     
 		trust_score = 100;
 		order_num = 0;
 		for movie in movies_list[0].xpath("./li"):
 			score_penalty = 0
+	
 			#YEAR
 			try:
-				year = int(movie.xpath(".//a[contains(@class, 'hitTitle')]")[0].get('href')[-11:-7])        
+				year = int(movie.xpath(".//span[contains(@class, 'filmPreview__year')]/text()")[0])
 			except:
 				year = 0;
 			if year and media.year:
-				score_penalty += abs(int(media.year) - year)*4
+				score_penalty += abs(int(media.year) - year) * 4
+				
 			Log("Year: " + str(year));
 			#TITLE
-			title = movie.xpath(".//a[contains(@class, 'hitTitle')]")[0].text_content()
-			title = title.strip()
-			Log("Title: " + title);
-			index = title.find(" / ")
-			if index > -1:
-				polish_title = title[0:index]
-				original_title = title[(index+3):]
-				s1 = Util.LevenshteinDistance(media.name, polish_title)
-				s2 = Util.LevenshteinDistance(media.name, original_title)
-				if s1 < s2:
-					score_penalty += s1
-				else:
-					score_penalty += s2
+			el = movie.xpath(".//h3[contains(@class, 'filmPreview__title')]/text()")
+			if (el):
+				polish_title = el[0]
 			else:
 				polish_title = ''
-				original_title = title
-				score_penalty += Util.LevenshteinDistance(media.name, original_title)
+			el = movie.xpath(".//div[contains(@class, 'filmPreview__originalTitle')]/text()")
+			if el:
+				original_title = el[0]
+			else:
+				original_title = polish_title			
+			
+			Log("Original title: " + original_title)
+			Log("Polish title: " + polish_title);
+			
+			s1 = Util.LevenshteinDistance(media.name, polish_title)
+			s2 = Util.LevenshteinDistance(media.name, original_title)
+			if s1 < s2:
+				score_penalty += s1
+			else:
+				score_penalty += s2
+				
 			name = polish_title
 			if name == '':
 				name = original_title
+			Log("NAME: " + name)        
 			#SCORE
 			score = 100 - score_penalty
 			for i in range(len(results)):
@@ -81,11 +94,12 @@ class FilmWebStandaloneAgent(Agent.Movies):
           
 			Log("Score: " + str(score));
 			#ID
-			id = movie.xpath(".//a[contains(@class, 'hitTitle')]")[0].get('href').encode('hex')
+			id_string = movie.xpath("string(.//a[contains(@class, 'filmPreview__link')]/@href)")
+			id_string.replace(FILMWEB, '') # niektore zawieraja sam tytul np. www.filmweb.pl/Auta
+			id = id_string.encode('hex')
 			Log("ID: " + str(id));
 			#mine.append((name, year, score))
 			results.Append(MetadataSearchResult(id=id, name=name, year=year, score=score, lang=lang))
-
 				
 
 	def update(self, metadata, media, lang): 
@@ -96,12 +110,13 @@ class FilmWebStandaloneAgent(Agent.Movies):
 		info_filmweb_result = HTML.ElementFromURL(FILMWEB + movie_id, 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
 		
 		#TITLE
-		metadata.title = media.title			
+		metadata.title = media.title
+		Log("TITLE: " + metadata.title)			
 		
 		#SUMMARY 
 		overview = ""       
 		try:
-			overview = info_filmweb_result.xpath(".//div[contains(@class, 'filmMainDescription')]/p[contains(@itemprop, 'description')]")[0].text      
+			overview = info_filmweb_result.xpath("string(.//div[contains(@class, 'filmMainDescription')]/p[contains(@itemprop, 'description')])").replace(u"... wi\u0119cej", "")
 			metadata.summary = overview
 		except:
 			pass 
@@ -121,44 +136,12 @@ class FilmWebStandaloneAgent(Agent.Movies):
 		Log("TAGLINE: " + str(tagline));
 		
 		#RELEASE DAY
-		info_filmweb_dates_result = HTML.ElementFromURL(FILMWEB + movie_id + '/dates', 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
-		try:
-			release_day = info_filmweb_dates_result.xpath("//table[contains(@class, 'sep-hr-table')]")[0].xpath("./tr")[0].xpath("./td")[1].text;
-			Log("RELEASE DAY: " + release_day);	
-			var = 2;
-			if release_day[1:2] == " ":
-				var = 1;
-			if "stycznia" in release_day:
-				release_day = release_day[-4:] + "-01-" + release_day[:var];
-			elif "lutego" in release_day:
-				release_day = release_day[-4:] + "-02-" + release_day[:var];
-			elif "marca" in release_day:
-				release_day = release_day[-4:] + "-03-" + release_day[:var];
-			elif "kwietnia" in release_day:
-				release_day = release_day[-4:] + "-04-" + release_day[:var];
-			elif "maja" in release_day:
-				release_day = release_day[-4:] + "-05-" + release_day[:var];
-			elif "czerwca" in release_day:
-				release_day = release_day[-4:] + "-06-" + release_day[:var];
-			elif "lipca" in release_day:
-				release_day = release_day[-4:] + "-07-" + release_day[:var];
-			elif "sierpnia" in release_day:
-				release_day = release_day[-4:] + "-08-" + release_day[:var];
-			elif "wrze" in release_day:
-				release_day = release_day[-4:] + "-09-" + release_day[:var];        
-			elif "pa" in release_day:
-				release_day = release_day[-4:] + "-10-" + release_day[:var];
-			elif "listopada" in release_day:
-				release_day = release_day[-4:] + "-11-" + release_day[:var];
-			elif "grudnia" in release_day:
-				release_day = release_day[-4:] + "-12-" + release_day[:var];  
-		except:
-			release_day = ''
-		Log("RELEASE DAY: " + release_day);			
+		release_day = info_filmweb_result.xpath("string(//div[contains(@class, 'filmMainHeaderParent')]/div['filmMainHeader']/span[@itemprop='datePublished']/@content)")
+		Log("RELEASE DAY: " + release_day)
+
 		if release_day != '':
 			metadata.year = int(release_day[:4])
-			metadata.originally_available_at = Datetime.ParseDate(release_day).date()
-
+			metadata.originally_available_at = Datetime.ParseDate(release_day).date()		
 			
 		#RATING
 		try:
@@ -173,11 +156,14 @@ class FilmWebStandaloneAgent(Agent.Movies):
 		
 		#ORIGINAL TITLE
 		try:
-			info_filmweb_titles_result = HTML.ElementFromURL(FILMWEB + movie_id + '/titles', 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
-			original_title = info_filmweb_titles_result.xpath(".//li/div[div[contains(@class, 'text-right')][text()=contains(.,'oryginalny')]]/div[contains(@class, 's-16')]")[0].text;    
+			setfilm_script = info_filmweb_result.xpath("string(//div[contains(@class, 'filmMainHeaderParent')]/div['filmMainHeader']/script)")
+			original_title = re.search(r"originalTitle:\"(.+?)\"", setfilm_script).group(1)
+			
 			metadata.original_title = original_title
-			Log("ORIGINAL TITLE: " + original_title);
+			Log("ORIGINAL TITLE: " + original_title)
 		except:
+			Log("ORIGINAL TITLE: Error getting original title")
+			metadata.original_title = metadata.title
 			pass
 		
 		#COUNTRIES
@@ -213,26 +199,51 @@ class FilmWebStandaloneAgent(Agent.Movies):
 				pass
 			
 		#DIRECTORS
+		crew_page = None
 		metadata.directors.clear()
-		for directors in info_filmweb_result.xpath(".//div[contains(@class, 'filmInfo')]//th[text()=starts-with(.,'re')]/parent::tr//a"):
-			try:
-				director = directors.text_content().strip()
-				metadata.directors.new().name = director
-				Log("DIRECTOR: " + director)
-			except:
-				pass
+		directors_links = info_filmweb_result.xpath(".//div[contains(@class, 'filmInfo')]//th[text()=starts-with(.,'re')]/parent::tr//a/@href")
+		if len(directors_links) > 0 and str(directors_links[-1]).startswith('/film'):
+			# get directors from crew page
+			crew_url = FILMWEB + str(directors_links[-1]).replace('#director', '')
+			info_filmweb_crew_result = HTML.ElementFromURL(crew_url, 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
+
+			for director in info_filmweb_crew_result.xpath("//form/h2[starts-with(text(), 're')]/following-sibling::div[1]/table/tr/td/a[starts-with(@href, '/person') and @title]/@title"):
+				metadata.directors.new().name = director.strip()
+				Log("DIRECTOR: " + director.strip())
+			pass
+		else:
+			for directors in info_filmweb_result.xpath(".//div[contains(@class, 'filmInfo')]//th[text()=starts-with(.,'re')]/parent::tr//a"):
+				try:
+					director = directors.text_content().strip()
+					metadata.directors.new().name = director
+					Log("DIRECTOR: " + director)
+				except:
+					pass		
+				
 		
-    #WRITERS
+		#WRITERS
 		metadata.writers.clear()
-		for writers in info_filmweb_result.xpath(".//div[contains(@class, 'filmInfo')]//th[text()=starts-with(.,'sc')]/parent::tr//a"):
-			try:
-				writer = writers.text_content().strip()
-				metadata.writers.new().name = writer
-				Log("WRITER: " + writer)
-			except:
-				pass
-    
-		#POSTER
+		writers_links = info_filmweb_result.xpath(".//div[contains(@class, 'filmInfo')]//th[text()=starts-with(.,'sce')]/parent::tr//a/@href")
+		if len(writers_links) > 0 and str(writers_links[-1]).startswith('/film'):
+			# get writers from crew page
+			if crew_page is None:
+				crew_url = FILMWEB + str(writers_links[-1]).replace('#screenwriter', '')
+				info_filmweb_crew_result = HTML.ElementFromURL(crew_url, 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
+
+			for writer in info_filmweb_crew_result.xpath("//form/h2[starts-with(text(), 'sce')]/following-sibling::div[1]/table/tr/td/a[starts-with(@href, '/person') and @title]/@title"):
+				metadata.writers.new().name = writer.strip()
+				Log("WRITER: " + writer.strip())
+			pass
+		else:
+			for writers in info_filmweb_result.xpath(".//div[contains(@class, 'filmInfo')]//th[text()=starts-with(.,'sce')]/parent::tr//a"):
+				try:
+					writer = writers.text_content().strip()
+					metadata.writers.new().name = writer
+					Log("WRITER: " + writer)
+				except:
+					pass		
+
+		#POSTERS
 		info_filmweb_posters_result = HTML.ElementFromURL(FILMWEB + movie_id + '/posters', 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
     
 		#del metadata.posters
@@ -259,7 +270,7 @@ class FilmWebStandaloneAgent(Agent.Movies):
 			except:
 				pass
         
-    #ART (BACKGROUND)
+		#ART (BACKGROUND)
 		info_filmweb_art_result = HTML.ElementFromURL(FILMWEB + movie_id + '/photos', 0, {'Cookie':HTTP.CookiesForURL(FILMWEB)}, cacheTime = 0)
     
 		#del metadata.posters
