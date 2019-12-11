@@ -193,7 +193,7 @@ class FilmWebStandaloneAgent(Agent.Movies):
 				role = metadata.roles.new()
 				role.role = actors.xpath(".//td")[3].xpath(".//span[contains(@itemprop, 'characterName')]/span")[0].text_content()
 				role.name = actors.xpath(".//td/a")[1].text_content()
-				role.photo = actors.xpath(".//td")[0].xpath(".//img")[0].get('src').replace('2.jpg','1.jpg')
+				role.photo = actors.xpath(".//td[1]/a/img/@data-src")[0].replace('2.jpg', '1.jpg')
 				Log("ACTOR: " + role.name + " AS " + role.role);        
 			except:
 				pass
