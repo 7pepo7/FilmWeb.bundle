@@ -191,7 +191,7 @@ class FilmWebStandaloneAgent(Agent.Movies):
 		info_filmweb_actors_result = HTML.ElementFromURL(actors_url)
 		metadata.roles.clear()
 
-		for person_list in info_filmweb_actors_result.xpath(".//div[@class = 'filmFullCastSection__item castRoleListElement ']"):
+    for person_list in info_filmweb_actors_result.xpath(".//div[@class = 'filmFullCastSection__item castRoleListElement ']"):
 
 			person_image = person_list.xpath(".//img[@class = 'simplePoster__image']/@data-src")
 			if person_image is not None and len(person_image) > 0:
