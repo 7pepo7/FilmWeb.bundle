@@ -245,7 +245,7 @@ class FilmWebStandaloneAgent(Agent.Movies):
 		sort = 1
 		for posters in info_filmweb_posters_result.xpath(".//img[@class = 'simplePoster__image']/@data-src"):
 			try:
-				poster_url = posters.replace('2.jpg', '3.jpg')
+				poster_url = posters.replace('6.jpg', '3.jpg')
 				poster = HTTP.Request(poster_url)
 				metadata.posters[poster_url] = proxy(poster, sort_order = sort)
 				sort = sort + 1
